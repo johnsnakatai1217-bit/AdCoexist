@@ -30,8 +30,9 @@ AdCoexist does the same for replacers, so they can be used together and managed 
 ### Installation
 
 1. Install requirements
-2. Extract the release archive `AdCoexist-x.x.x.zip` into the Cyberpunk 2077 directory, or install it with Vortex
-3. Install your ad replacers as usual
+2. Download AdCoexist from [Nexus Mods](https://www.nexusmods.com/cyberpunk2077/mods/39192) or [GitHub Releases](https://github.com/johnsnakatai1217-bit/AdCoexist/releases)
+3. Extract the release archive `AdCoexist-x.x.x.zip` into the Cyberpunk 2077 directory, or install it with Vortex
+4. Install your ad replacers as usual
 
 ### How it works
 
@@ -84,5 +85,6 @@ It includes code from [RED4ext.SDK](https://github.com/wopss/RED4ext.SDK) (MIT),
   [custom advertisements guide](https://wiki.redmodding.org/cyberpunk-2077-modding/modding-guides/textures-and-luts/custom-advertisements-1)
   by mana vortex and nremind, which this mod is built on. The ads AdCoexist creates follow the format described in the guide.
 - [RED4ext](https://github.com/wopss/RED4ext) by WopsS
-- [TweakXL](https://github.com/psiberx/cp2077-tweak-xl) and [ArchiveXL](https://github.com/psiberx/cp2077-archive-xl) by psiberx
+- [TweakXL](https://github.com/psiberx/cp2077-tweak-xl) by psiberx, used to add the generated ad records
+- [ArchiveXL](https://github.com/psiberx/cp2077-archive-xl) by psiberx, whose source code was a reference for how the game loads archives
 - [WolvenKit](https://github.com/WolvenKit/WolvenKit), whose file and TweakDB name lists are used to build the ad catalog
