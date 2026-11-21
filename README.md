@@ -1,6 +1,8 @@
 # AdCoexist
 
-AdCoexist lets multiple billboard ad replacers work together by turning each of them into an additional ad.
+Install as many billboard ad mods as you like, and every one of them shows up in the game, even if they replace the same ad.
+
+AdCoexist turns each ad replacer into an additional ad and puts the vanilla ad back in its original place.
 
 This mod is inspired by [Advert Controller](https://www.nexusmods.com/cyberpunk2077/mods/18118) and the
 [custom advertisements guide](https://wiki.redmodding.org/cyberpunk-2077-modding/modding-guides/textures-and-luts/custom-advertisements-1)
