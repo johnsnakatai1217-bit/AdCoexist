@@ -80,7 +80,7 @@ It includes code from [RED4ext.SDK](https://github.com/wopss/RED4ext.SDK) (MIT),
 
 ## Credits
 
-- [Advert Controller](https://www.nexusmods.com/cyberpunk2077/mods/18118) and the
+- [Advert Controller](https://www.nexusmods.com/cyberpunk2077/mods/18118) by nremind and the
   [custom advertisements guide](https://wiki.redmodding.org/cyberpunk-2077-modding/modding-guides/textures-and-luts/custom-advertisements-1)
   by mana vortex and nremind, which this mod is built on. The ads AdCoexist creates follow the format described in the guide.
 - [RED4ext](https://github.com/wopss/RED4ext) by WopsS
