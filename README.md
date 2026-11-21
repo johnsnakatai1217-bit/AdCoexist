@@ -46,6 +46,7 @@ Ad extensions are not affected.
 ## Notes
 
 - Converted ads appear in the same districts as the ad they replace. Use Advert Controller if you want to change that.
+- Some billboards always show the same ad. These keep showing the vanilla ad, and the converted ads appear on the other billboards.
 - Some ads are only used in specific places or quests and are not part of any district. A replacer for one of these is shown on random billboards in all districts, and the original place shows the vanilla ad.
 - Advert Controller hides the static version of vanilla ads that have an animated version. This doesn't apply to converted ads, so both versions of a replacer are shown. You can turn one of them off in Advert Controller.
 - Replacers that use ArchiveXL resource links, patches or extra archives are not converted.
