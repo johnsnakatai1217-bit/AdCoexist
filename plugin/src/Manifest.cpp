@@ -63,3 +63,39 @@ Manifest::Reuse Manifest::Decide(std::string_view aManifest, std::string_view aF
         return Reuse::Generated;
     return Reuse::No;
 }
+
+std::string Manifest::ExplainNo(std::string_view aManifest, std::string_view aFingerprint, bool aGeneratedExists,
+                                const Outputs& aCurrentOutputs)
+{
+    if (aManifest.empty())
+        return "no previous result";
+
+    // Part of the manifest, or empty if the manifest is shorter
+    const auto slice = [aManifest](size_t aPos, size_t aCount = std::string_view::npos) {
+        return aPos <= aManifest.size() ? aManifest.substr(aPos, aCount) : std::string_view();
+    };
+    const auto withoutNewline = [](std::string_view aLine) {
+        return std::string(!aLine.empty() && aLine.back() == '\n' ? aLine.substr(0, aLine.size() - 1) : aLine);
+    };
+
+    // The first line of the fingerprint that differs from the manifest
+    size_t pos = 0;
+    while (pos < aFingerprint.size())
+    {
+        const auto end = aFingerprint.find('\n', pos);
+        const auto line = aFingerprint.substr(pos, end == std::string_view::npos ? end : end - pos + 1);
+        if (slice(pos, line.size()) != line)
+            return "changed: " + withoutNewline(line);
+        pos += line.size();
+    }
+    const std::string_view separator = Separator;
+    if (slice(pos, separator.size()) != separator)
+        return "changed: a mod was removed";
+
+    if (!aGeneratedExists)
+        return "the generated files are missing";
+    Outputs current = aCurrentOutputs;
+    current.empty = false;
+    return "the generated files changed (expected " + withoutNewline(slice(pos + separator.size())) + ", found " +
+           withoutNewline(OutputLine(current)) + ")";
+}

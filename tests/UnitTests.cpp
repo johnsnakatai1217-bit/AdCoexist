@@ -1,5 +1,5 @@
 // Small tests that run without the game. They use synthetic data and cover the archive format,
-// CR2W path replacement, CRCs, naming, the manifest and the conversion. tools/package.ps1 runs them after the build (ctest).
+// CR2W path replacement, CRCs, naming, the manifest, the conversion and the report. tools/package.ps1 runs them after the build (ctest).
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -16,6 +16,7 @@
 #include "Cr2w.hpp"
 #include "Manifest.hpp"
 #include "Naming.hpp"
+#include "Report.hpp"
 #include "Util.hpp"
 #include "Variant.hpp"
 
@@ -308,6 +309,23 @@ void TestManifest()
           Manifest::Reuse::Nothing);
     CHECK(Manifest::Decide("", fingerprint, true, outputs) == Manifest::Reuse::No);
     CHECK(Manifest::Decide(manifest + "x", fingerprint, true, outputs) == Manifest::Reuse::No); // corrupted manifest
+
+    // Why the previous result isn't reused
+    CHECK(Manifest::ExplainNo("", fingerprint, true, outputs) == "no previous result");
+    CHECK(Manifest::ExplainNo(manifest, Manifest::Fingerprint(otherInputs), true, outputs) ==
+          "changed: mod 1597440 132923815293828677 archive\\pc\\mod\\a.archive");
+    auto added = inputs;
+    added.mods.push_back({"archive\\pc\\mod\\b.archive", 1, 2});
+    CHECK(Manifest::ExplainNo(manifest, Manifest::Fingerprint(added), true, outputs) ==
+          "changed: mod 1 2 archive\\pc\\mod\\b.archive");
+    auto removed = inputs;
+    removed.mods.clear();
+    CHECK(Manifest::ExplainNo(manifest, Manifest::Fingerprint(removed), true, outputs) ==
+          "changed: a mod was removed");
+    CHECK(Manifest::ExplainNo(manifest, fingerprint, false, outputs) == "the generated files are missing");
+    CHECK(Manifest::ExplainNo(manifest, fingerprint, true, changed) ==
+          "the generated files changed (expected output 5017600 5105, found output 5017600 5106)");
+    CHECK(Manifest::ExplainNo("adcoexist-manifest 1\n", fingerprint, true, outputs) == "changed: adcoexist 0.15.1");
 }
 
 // ---- Conversion of one ad ------------------------------------------------------------------------------------------------
@@ -490,6 +508,67 @@ void TestUtil()
     CHECK(Util::Lower("AbC\\Z") == "abc\\z");
     CHECK(Util::EndsWith("a.inkwidget", ".inkwidget") && !Util::EndsWith("x", ".inkwidget"));
 }
+
+// ---- Report ----------------------------------------------------------------------------------------------
+
+void TestReport()
+{
+    // Lines that fit are all kept, indented
+    CHECK(Report::FitLines({"a", "b"}, 100) == "  a\n  b\n");
+
+    // Lines that don't fit are counted in the last line
+    std::vector<std::string> many(500, "archive\\pc\\mod\\Some_Ad_Replacer.archive: 12 ad(s)");
+    const auto fitted = Report::FitLines(many, 1000);
+    CHECK(fitted.size() <= 1000);
+    CHECK(fitted.find("more\n") != std::string::npos);
+
+    // A long line is cut without splitting a UTF-8 character (each "あ" is 3 bytes)
+    std::string japanese;
+    for (int i = 0; i < 200; ++i)
+        japanese += "あ";
+    const auto cut = Report::FitLines({japanese}, 1000);
+    CHECK(cut.size() <= Report::LineLength + 3);
+    const auto body = cut.substr(2, cut.size() - 2 - 4); // without the indent and "...\n"
+    CHECK(body.size() % 3 == 0);
+
+    // The game directory is hidden, ignoring case
+    CHECK(Report::HidePath("read D:\\Games\\Cyberpunk 2077\\archive\\pc\\content\\basegame_1.archive: bad",
+                           "d:\\games\\cyberpunk 2077") == "read <game>\\archive\\pc\\content\\basegame_1.archive: bad");
+    CHECK(Report::HidePath("no path", "d:\\games") == "no path");
+
+    // The summary and the whole report stay within the limits, even with many mods and problems
+    std::vector<Report::ConvertedMod> mods(300, {"archive\\pc\\mod\\Some_Ad_Replacer.archive", 12});
+    std::vector<std::string> problems(300, "error: archive\\pc\\mod\\Broken.archive: some_ad: unexpected data");
+    const auto summary = Report::Summary("2026-11-23 01:00:00", mods, problems);
+    CHECK(summary.size() <= Report::SummaryLength);
+    CHECK(summary.find("Problems at that conversion:") != std::string::npos);
+
+    Report::Start start;
+    start.time = "2026-11-23 01:00:00";
+    start.adcoexist = "1.1.0";
+    start.game = "2.5.0";
+    start.catalog = "2.50, matches the game";
+    start.red4ext = "1.31.1";
+    start.tweakXl = "1.12.2";
+    start.modManager = "MO2";
+    start.modArchives = 300;
+    start.result = "mods unchanged, reused the last conversion";
+    start.problems = problems;
+    const auto report = Report::Compose(start, summary);
+    CHECK(report.size() <= Report::MaxLength);
+    CHECK(report.find("Installed with: MO2") != std::string::npos);
+    CHECK(report.find("Last conversion: 2026-11-23") != std::string::npos);
+
+    // A summary that is too long (changed by hand) is cut
+    CHECK(Report::Compose(start, std::string(10000, 'x')).size() <= Report::MaxLength);
+
+    // Without a summary and problems
+    start.problems.clear();
+    const auto plain = Report::Compose(start, "");
+    CHECK(plain.find("Problems at this start: none") != std::string::npos);
+    CHECK(plain.find("Last conversion: not available") != std::string::npos);
+    CHECK(Report::Summary("t", {}, {}).find("Converted mods: none") != std::string::npos);
+}
 } // namespace
 
 int main()
@@ -503,6 +582,7 @@ int main()
     TestManifest();
     TestVariant();
     TestUtil();
+    TestReport();
     if (g_failures == 0)
         std::printf("all tests passed\n");
     return g_failures == 0 ? 0 : 1;

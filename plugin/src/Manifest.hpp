@@ -51,4 +51,8 @@ std::string Compose(std::string_view aFingerprint, const Outputs& aOutputs);
 // Decides whether to reuse the previous result from the manifest, the current inputs and the existing files
 Reuse Decide(std::string_view aManifest, std::string_view aFingerprint, bool aGeneratedExists,
              const Outputs& aCurrentOutputs);
+
+// Why Decide returned Reuse::No, for the log and the report (e.g. "changed: mod 123 456 archive\pc\mod\a.archive")
+std::string ExplainNo(std::string_view aManifest, std::string_view aFingerprint, bool aGeneratedExists,
+                      const Outputs& aCurrentOutputs);
 } // namespace Manifest

@@ -61,7 +61,9 @@ Remove `red4ext\plugins\AdCoexist`. You can also delete `r6\cache\AdCoexist`, bu
 
 ### Troubleshooting
 
-The log is written to `red4ext\logs\adcoexist-<date>.log`. Please include it with bug reports, together with the list of your ad mods.
+On every game start, AdCoexist writes a short report to `red4ext\logs\adcoexist-report.txt` (with MO2, it's in the `overwrite` folder). The report fits in one Nexus post and contains no folder paths, so you can paste it as is. Please include it with bug reports.
+
+The full log is written to `red4ext\logs\adcoexist-<date>.log`.
 
 ## Building from source
 

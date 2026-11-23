@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.23)
 
-project(AdCoexist VERSION 1.0.0 LANGUAGES CXX)
+project(AdCoexist VERSION 1.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -18,9 +18,11 @@ add_library(AdCoexist SHARED
   plugin/src/Manifest.cpp
   plugin/src/Naming.cpp
   plugin/src/Oodle.cpp
+  plugin/src/Report.cpp
   plugin/src/Variant.cpp
 )
-target_link_libraries(AdCoexist PRIVATE RED4ext::SDK)
+# version: reads the versions of RED4ext and TweakXL for the report
+target_link_libraries(AdCoexist PRIVATE RED4ext::SDK version)
 target_compile_definitions(AdCoexist PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX
   # The version is set only here (project VERSION). tools/package.ps1 reads it from here too
   ADCOEXIST_VERSION_MAJOR=${PROJECT_VERSION_MAJOR}
@@ -39,6 +41,7 @@ add_executable(AdCoexistTests
   plugin/src/Manifest.cpp
   plugin/src/Naming.cpp
   plugin/src/Oodle.cpp
+  plugin/src/Report.cpp
   plugin/src/Variant.cpp
 )
 # Only the RED4ext.SDK headers are used (to compare with the ResourcePath hash)
