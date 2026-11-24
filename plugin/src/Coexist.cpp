@@ -119,6 +119,7 @@ struct Conversion
     const ModArchive* mod;
     const AdCatalog::Ad* ad;
     std::vector<const AdCatalog::File*> provided;
+    std::string reason; // why it is converted
 };
 
 // Reads files by hash from the first archive (in priority order) that contains them
@@ -129,6 +130,11 @@ public:
     {
         for (auto hash : aHashes)
             m_archiveOf.try_emplace(hash, aArchive);
+    }
+
+    bool Contains(uint64_t aHash) const
+    {
+        return m_archiveOf.contains(aHash);
     }
 
     // Reads all files with the given hashes, opening each archive once
@@ -334,24 +340,65 @@ FileSource ReadIndexes(Archives& aArchives)
     return vanilla;
 }
 
-// 4. Finds the replaced ads
-std::vector<Conversion> FindConversions(const Archives& aArchives)
+// Reads files of one mod archive by hash
+Variant::FileReader ModReader(const ModArchive& aMod)
+{
+    return [&aMod](const std::unordered_set<uint64_t>& aHashes, std::unordered_map<uint64_t, Archive::File>& aOut) {
+        std::vector<Archive::File> files;
+        std::string error;
+        if (!Archive::Read(aMod.path, files, error, &aHashes))
+            return false;
+        for (auto& file : files)
+            aOut[file.hash] = std::move(file);
+        return true;
+    };
+}
+
+// 4. Finds the ads whose picture a mod changes. aSkipped gets the mods with ads that only change how
+// the game's own pictures are shown
+std::vector<Conversion> FindConversions(const Archives& aArchives, const FileSource& aVanilla,
+                                        std::vector<Report::ConvertedMod>& aSkipped)
 {
     const auto& catalog = AdCatalog::Get();
+    const auto isAdded = [&aArchives, &aVanilla](uint64_t aHash) {
+        if (aVanilla.Contains(aHash))
+            return false;
+        for (const auto& mod : aArchives.mods)
+        {
+            if (mod.hashes.contains(aHash))
+                return true;
+        }
+        return false;
+    };
     std::vector<Conversion> conversions;
     for (const auto& mod : aArchives.mods)
     {
+        const auto readMod = ModReader(mod);
         for (uint16_t i = 0; i < catalog.adCount; ++i)
         {
             const auto& ad = catalog.ads[i];
-            Conversion conversion{&mod, &ad, {}};
+            Conversion conversion{&mod, &ad, {}, {}};
             for (uint16_t f = 0; f < ad.fileCount; ++f)
             {
                 if (Variant::IsConvertible(ad.files[f].kind) && mod.hashes.contains(Naming::PathHash(ad.files[f].path)))
                     conversion.provided.push_back(&ad.files[f]);
             }
-            if (!conversion.provided.empty())
-                conversions.push_back(std::move(conversion));
+            if (conversion.provided.empty())
+                continue;
+
+            const auto decision = Variant::Decide(conversion.provided, readMod, isAdded);
+            if (decision.readError)
+                LOG_WARN("%s: %s: %s, converting it", mod.relative.c_str(), ad.folder, decision.reason.c_str());
+            if (!decision.convert)
+            {
+                LOG_INFO("not converted %s: %s (%s)", mod.relative.c_str(), ad.folder, decision.reason.c_str());
+                if (aSkipped.empty() || aSkipped.back().archive != mod.relative)
+                    aSkipped.push_back({mod.relative, 0});
+                ++aSkipped.back().ads;
+                continue;
+            }
+            conversion.reason = decision.reason;
+            conversions.push_back(std::move(conversion));
         }
     }
     return conversions;
@@ -393,16 +440,7 @@ Generated Convert(const std::vector<Conversion>& aConversions, const FileSource&
                      request.recordStem.c_str());
         }
 
-        auto readMod = [&mod](const std::unordered_set<uint64_t>& aHashes,
-                              std::unordered_map<uint64_t, Archive::File>& aOut) {
-            std::vector<Archive::File> files;
-            std::string error;
-            if (!Archive::Read(mod.path, files, error, &aHashes))
-                return false;
-            for (auto& file : files)
-                aOut[file.hash] = std::move(file);
-            return true;
-        };
+        const auto readMod = ModReader(mod);
         auto readVanilla = [&aVanilla](const std::unordered_set<uint64_t>& aHashes,
                                        std::unordered_map<uint64_t, Archive::File>& aOut) {
             return aVanilla.Read(aHashes, aOut);
@@ -425,8 +463,8 @@ Generated Convert(const std::vector<Conversion>& aConversions, const FileSource&
         if (generated.mods.empty() || generated.mods.back().archive != mod.relative)
             generated.mods.push_back({mod.relative, 0});
         ++generated.mods.back().ads;
-        LOG_INFO("converted %s: %s (%u file(s) replaced by the mod)", mod.relative.c_str(), conversion.ad->folder,
-                 static_cast<unsigned>(conversion.provided.size()));
+        LOG_INFO("converted %s: %s (%u file(s) replaced by the mod, %s)", mod.relative.c_str(), conversion.ad->folder,
+                 static_cast<unsigned>(conversion.provided.size()), conversion.reason.c_str());
     }
 
     std::unordered_map<uint64_t, Archive::File> vanillaFiles;
@@ -624,16 +662,21 @@ Outcome Process(RED4ext::ResourceDepot* aDepot, const fs::path& aGameDir, const 
     RemoveGenerated(cacheDir); // remove the manifest first, so a crash during generation causes a rebuild next time
 
     const auto vanilla = ReadIndexes(archives);
-    const auto conversions = FindConversions(archives);
-    LOG_INFO("found %u replaced ad(s) in %u mod archive(s)", static_cast<unsigned>(conversions.size()),
-             static_cast<unsigned>(archives.mods.size()));
+    std::vector<Report::ConvertedMod> skipped;
+    const auto conversions = FindConversions(archives, vanilla, skipped);
+    unsigned skippedAds = 0;
+    for (const auto& mod : skipped)
+        skippedAds += mod.ads;
+    LOG_INFO("found %u ad(s) to convert in %u mod archive(s), %u not converted", static_cast<unsigned>(conversions.size()),
+             static_cast<unsigned>(archives.mods.size()), skippedAds);
+    const auto notConverted = std::to_string(skippedAds) + " not converted";
     if (conversions.empty())
     {
         // Generated files are already removed, so ads of removed mods don't remain
         outcome.summarized = g_problems.size();
-        if (WriteText(cacheDir / SummaryName, Report::Summary(aTime, {}, ProblemsFrom(0, aGameDir))))
+        if (WriteText(cacheDir / SummaryName, Report::Summary(aTime, {}, skipped, ProblemsFrom(0, aGameDir))))
             WriteManifest(cacheDir, fingerprint, true);
-        outcome.result = "no replaced ads found, nothing to convert (not reused: " + whyNotReused + ")";
+        outcome.result = "no ads to convert (" + notConverted + "; not reused: " + whyNotReused + ")";
         return outcome;
     }
 
@@ -647,7 +690,7 @@ Outcome Process(RED4ext::ResourceDepot* aDepot, const fs::path& aGameDir, const 
     }
     // The manifest is written last. If anything before it fails, the next start converts again
     outcome.summarized = g_problems.size();
-    if (WriteText(cacheDir / SummaryName, Report::Summary(aTime, generated.mods, ProblemsFrom(0, aGameDir))))
+    if (WriteText(cacheDir / SummaryName, Report::Summary(aTime, generated.mods, skipped, ProblemsFrom(0, aGameDir))))
         WriteManifest(cacheDir, fingerprint, false);
 
     uint32_t loaded = 0;
@@ -656,7 +699,7 @@ Outcome Process(RED4ext::ResourceDepot* aDepot, const fs::path& aGameDir, const 
     LOG_INFO("generated %u ad(s), %u file(s), %u record(s) in %llu ms (loaded=%u, tweak registered=%d)", generated.ads,
              static_cast<unsigned>(generated.files.size()), generated.records, elapsed(), loaded, registered ? 1 : 0);
     outcome.result = "converted " + std::to_string(generated.ads) + " ad(s) into " +
-                     std::to_string(generated.records) + " record(s) (" + std::to_string(loaded) +
+                     std::to_string(generated.records) + " record(s), " + notConverted + " (" + std::to_string(loaded) +
                      " file(s) loaded, tweak registered: " + yesNo(registered) + "; not reused: " + whyNotReused + ")";
     return outcome;
 }

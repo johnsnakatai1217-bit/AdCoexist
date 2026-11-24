@@ -37,6 +37,21 @@ struct Result
 // Whether a catalog file kind is converted
 bool IsConvertible(AdCatalog::FileKind aKind);
 
+// Whether one mod's version of one ad is converted, and why
+struct Decision
+{
+    bool convert = false;
+    bool readError = false; // the mod's files couldn't be read (converted, as before)
+    std::string reason;
+};
+
+// Converts only mods that change the picture: the mod replaces an image, or one of its .inkatlas and .inkwidget
+// files references a file added by mods. Mods that only change how vanilla pictures are shown (quality, animation,
+// layout fixes) aren't converted. aIsAdded tells whether a path hash is in a mod archive but not in the vanilla
+// archives (references to files that exist nowhere are mistakes in the mod, not new pictures)
+Decision Decide(const std::vector<const AdCatalog::File*>& aProvided, const FileReader& aReadMod,
+                const std::function<bool(uint64_t)>& aIsAdded);
+
 // Districts for ads that aren't in any district list (the 18 from the custom advertisements guide)
 const std::vector<const char*>& AllDistricts();
 

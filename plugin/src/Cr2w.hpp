@@ -17,5 +17,8 @@ using Replacement = std::pair<std::string, std::string>; // original path, new p
 int ReplacePaths(std::vector<uint8_t>& aMain, std::vector<std::vector<uint8_t>>& aBuffers,
                  const std::vector<Replacement>& aReplacements, std::string& aError);
 
+// Reads the paths in the import table (the files this file references). Returns false if the tables can't be read
+bool ReadImports(const std::vector<uint8_t>& aMain, std::vector<std::string>& aPaths, std::string& aError);
+
 uint32_t Crc32(const uint8_t* aData, size_t aSize);
 } // namespace Cr2w

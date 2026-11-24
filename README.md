@@ -43,6 +43,8 @@ would, and restores the vanilla images for the original ad.
 
 The generated files are stored in `r6\cache\AdCoexist` and are reused until your mods change.
 Ad extensions are not affected.
+Mods that keep the vanilla pictures and only change how they are shown, such as quality, animation or layout fixes,
+are not converted and work as they do without AdCoexist.
 
 ## Notes
 

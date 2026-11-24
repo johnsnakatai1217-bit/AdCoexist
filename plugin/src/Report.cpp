@@ -78,15 +78,21 @@ std::string Report::HidePath(std::string_view aText, std::string_view aDirectory
 }
 
 std::string Report::Summary(std::string_view aTime, const std::vector<ConvertedMod>& aMods,
-                            const std::vector<std::string>& aProblems)
+                            const std::vector<ConvertedMod>& aSkipped, const std::vector<std::string>& aProblems)
 {
-    constexpr size_t ModsLength = 1900;
+    constexpr size_t ModsLength = 1400;
+    constexpr size_t SkippedLength = 500;
     std::string out = "Last conversion: " + std::string(aTime) + "\n";
 
-    std::vector<std::string> mods;
-    for (const auto& mod : aMods)
-        mods.push_back(mod.archive + ": " + std::to_string(mod.ads) + " ad(s)");
-    out += Section("Converted mods:", mods, ModsLength);
+    const auto lines = [](const std::vector<ConvertedMod>& aList) {
+        std::vector<std::string> out;
+        for (const auto& mod : aList)
+            out.push_back(mod.archive + ": " + std::to_string(mod.ads) + " ad(s)");
+        return out;
+    };
+    out += Section("Converted mods:", lines(aMods), ModsLength);
+    out += Section("Not converted (only change how the game's own pictures are shown):", lines(aSkipped),
+                   SkippedLength);
     out += Section("Problems at that conversion:", aProblems, SummaryLength - out.size());
     return out;
 }

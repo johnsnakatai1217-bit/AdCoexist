@@ -15,6 +15,8 @@ constexpr size_t TableCount = 10;
 constexpr size_t TableSize = 12;    // offset, itemCount, crc32
 constexpr size_t BufferInfoSize = 24; // flags, index, offset, diskSize, memSize, crc32
 constexpr size_t StringsTable = 0;
+constexpr size_t ImportsTable = 2;
+constexpr size_t ImportSize = 8;      // offset in the string table, class name index, flags
 constexpr size_t BuffersTable = 5;
 
 uint32_t Read32(const std::vector<uint8_t>& aData, size_t aOffset)
@@ -66,6 +68,40 @@ uint32_t Cr2w::Crc32(const uint8_t* aData, size_t aSize)
     for (size_t i = 0; i < aSize; ++i)
         crc = table[(crc ^ aData[i]) & 0xFF] ^ (crc >> 8);
     return crc ^ 0xFFFFFFFFu;
+}
+
+bool Cr2w::ReadImports(const std::vector<uint8_t>& aMain, std::vector<std::string>& aPaths, std::string& aError)
+{
+    aPaths.clear();
+    if (aMain.size() < HeaderSize + TableCount * TableSize || Read32(aMain, 0) != Magic)
+    {
+        aError = "not a CR2W file";
+        return false;
+    }
+    const size_t stringsOffset = Read32(aMain, TableOffset(StringsTable));
+    const size_t stringsSize = Read32(aMain, TableOffset(StringsTable) + 4);
+    const size_t importsOffset = Read32(aMain, TableOffset(ImportsTable));
+    const size_t importCount = Read32(aMain, TableOffset(ImportsTable) + 4);
+    if (stringsOffset + stringsSize > aMain.size() || importsOffset + importCount * ImportSize > aMain.size())
+    {
+        aError = "unexpected table layout";
+        return false;
+    }
+    for (size_t i = 0; i < importCount; ++i)
+    {
+        const size_t start = stringsOffset + Read32(aMain, importsOffset + i * ImportSize);
+        const size_t end = stringsOffset + stringsSize;
+        size_t stop = start;
+        while (stop < end && aMain[stop] != 0)
+            ++stop;
+        if (stop >= end)
+        {
+            aError = "import " + std::to_string(i) + " is outside the string table";
+            return false;
+        }
+        aPaths.emplace_back(reinterpret_cast<const char*>(aMain.data() + start), stop - start);
+    }
+    return true;
 }
 
 int Cr2w::ReplacePaths(std::vector<uint8_t>& aMain, std::vector<std::vector<uint8_t>>& aBuffers,

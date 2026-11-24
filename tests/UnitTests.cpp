@@ -136,8 +136,10 @@ void TestArchiveRoundTrip()
 
 // ---- CR2W ------------------------------------------------------------------------------------------------------
 
-// Builds a minimal CR2W file with only a string table and a buffer table
-std::vector<uint8_t> MakeCr2w(const std::string& aStrings, uint32_t aBufferCount)
+// Builds a minimal CR2W file with only a string table, an import table and a buffer table.
+// Each import points to the string at that offset in the string table
+std::vector<uint8_t> MakeCr2w(const std::string& aStrings, uint32_t aBufferCount,
+                              const std::vector<uint32_t>& aImports = {})
 {
     constexpr size_t tablesEnd = 40 + 10 * 12;
     std::vector<uint8_t> main(tablesEnd, 0);
@@ -148,6 +150,15 @@ std::vector<uint8_t> MakeCr2w(const std::string& aStrings, uint32_t aBufferCount
     main.insert(main.end(), aStrings.begin(), aStrings.end());
     Set<uint32_t>(main, 40, stringsOffset);
     Set<uint32_t>(main, 44, static_cast<uint32_t>(aStrings.size()));
+
+    const auto importTable = static_cast<uint32_t>(main.size());
+    for (auto offset : aImports)
+    {
+        main.resize(main.size() + 8, 0);
+        Set<uint32_t>(main, main.size() - 8, offset);
+    }
+    Set<uint32_t>(main, 40 + 2 * 12, importTable);
+    Set<uint32_t>(main, 40 + 2 * 12 + 4, static_cast<uint32_t>(aImports.size()));
 
     const auto bufferTable = static_cast<uint32_t>(main.size());
     main.resize(main.size() + aBufferCount * 24, 0);
@@ -219,6 +230,26 @@ void TestCr2wRejects()
     CHECK(Cr2w::ReplacePaths(main, extraBuffer, {}, error) == -1); // buffer count doesn't match the table
 }
 // ---- Naming -------------------------------------------------------------------------------------------------
+
+void TestCr2wReadImports()
+{
+    // String table: "\0base\x\a.inkatlas\0base\x\b.xbm\0"
+    const std::string atlas = "base\\x\\a.inkatlas";
+    const std::string image = "base\\x\\b.xbm";
+    const auto strings = std::string("\0", 1) + atlas + std::string("\0", 1) + image + std::string("\0", 1);
+    const auto imageOffset = static_cast<uint32_t>(1 + atlas.size() + 1);
+    std::vector<std::string> paths;
+    std::string error;
+    CHECK(Cr2w::ReadImports(MakeCr2w(strings, 0, {1, imageOffset}), paths, error));
+    CHECK(paths == (std::vector<std::string>{atlas, image}));
+
+    CHECK(Cr2w::ReadImports(MakeCr2w(strings, 0), paths, error)); // no imports
+    CHECK(paths.empty());
+
+    CHECK(!Cr2w::ReadImports(MakeCr2w(strings, 0, {1000}), paths, error)); // outside the string table
+    CHECK(!Cr2w::ReadImports(MakeCr2w(std::string("\0abc", 4), 0, {1}), paths, error)); // not terminated in the table
+    CHECK(!Cr2w::ReadImports(Bytes(std::string(200, 'x')), paths, error));
+}
 
 void TestPathHash()
 {
@@ -488,6 +519,58 @@ void TestVariant()
     // Fails if a vanilla file is missing
     CHECK(!Variant::Build(request, Reader(mod), Reader({}), result, error));
 }
+
+void TestDecide()
+{
+    const std::string folder = "base\\gameplay\\gui\\world\\adverts\\testad\\";
+    const std::string image = folder + "testad.xbm";
+    const std::string atlas = folder + "testad.inkatlas";
+    const std::string widget = folder + "testad.inkwidget";
+    const std::string anim = folder + "testad_animations.inkanim";
+    const std::string newImage = "mymod\\pictures\\my_ad.xbm";
+    const AdCatalog::File imageFile{image.c_str(), AdCatalog::FileKind::Image};
+    const AdCatalog::File atlasFile{atlas.c_str(), AdCatalog::FileKind::Atlas};
+    const AdCatalog::File widgetFile{widget.c_str(), AdCatalog::FileKind::Widget};
+    // Only the mod's own image is a file added by mods
+    const auto isAdded = [&newImage](uint64_t aHash) { return aHash == Naming::PathHash(newImage); };
+    // A file whose import table lists aPaths
+    const auto withImports = [](const std::string& aPath, const std::vector<std::string>& aPaths) {
+        std::string strings(1, '\0');
+        std::vector<uint32_t> offsets;
+        for (const auto& path : aPaths)
+        {
+            offsets.push_back(static_cast<uint32_t>(strings.size()));
+            strings += path + std::string(1, '\0');
+        }
+        return RawFile(aPath, {MakeCr2w(strings, 0, offsets)});
+    };
+
+    // A mod that replaces an image is converted without reading its files
+    std::vector<uint64_t> asked;
+    auto decision = Variant::Decide({&imageFile, &atlasFile}, Reader({}, &asked), isAdded);
+    CHECK(decision.convert && !decision.readError);
+    CHECK(asked.empty());
+
+    // A mod whose .inkwidget only uses vanilla files (an animation or layout fix) isn't converted
+    decision = Variant::Decide({&widgetFile}, Reader({withImports(widget, {atlas, anim})}), isAdded);
+    CHECK(!decision.convert && !decision.readError);
+
+    // A reference to a file that exists nowhere (a typo in the mod) isn't a new picture
+    decision = Variant::Decide({&widgetFile}, Reader({withImports(widget, {folder + "typo_atlas.inkatlas"})}), isAdded);
+    CHECK(!decision.convert);
+
+    // A mod whose .inkatlas points to its own image at a new path is converted
+    decision = Variant::Decide({&atlasFile, &widgetFile},
+                               Reader({withImports(atlas, {newImage}), withImports(widget, {atlas})}), isAdded);
+    CHECK(decision.convert && !decision.readError);
+    CHECK(decision.reason.find(newImage) != std::string::npos);
+
+    // Files that can't be read are converted, as before
+    decision = Variant::Decide({&widgetFile}, Reader({}), isAdded);
+    CHECK(decision.convert && decision.readError);
+    decision = Variant::Decide({&widgetFile}, Reader({RawFile(widget, {Bytes("not a cr2w file")})}), isAdded);
+    CHECK(decision.convert && decision.readError);
+}
 // ---- Util ------------------------------------------------------------------------------------------------
 
 void TestUtil()
@@ -539,8 +622,9 @@ void TestReport()
     // The summary and the whole report stay within the limits, even with many mods and problems
     std::vector<Report::ConvertedMod> mods(300, {"archive\\pc\\mod\\Some_Ad_Replacer.archive", 12});
     std::vector<std::string> problems(300, "error: archive\\pc\\mod\\Broken.archive: some_ad: unexpected data");
-    const auto summary = Report::Summary("2026-11-23 01:00:00", mods, problems);
+    const auto summary = Report::Summary("2026-11-23 01:00:00", mods, mods, problems);
     CHECK(summary.size() <= Report::SummaryLength);
+    CHECK(summary.find("Not converted (") != std::string::npos);
     CHECK(summary.find("Problems at that conversion:") != std::string::npos);
 
     Report::Start start;
@@ -567,7 +651,9 @@ void TestReport()
     const auto plain = Report::Compose(start, "");
     CHECK(plain.find("Problems at this start: none") != std::string::npos);
     CHECK(plain.find("Last conversion: not available") != std::string::npos);
-    CHECK(Report::Summary("t", {}, {}).find("Converted mods: none") != std::string::npos);
+    const auto empty = Report::Summary("t", {}, {}, {});
+    CHECK(empty.find("Converted mods: none") != std::string::npos);
+    CHECK(empty.find("shown): none") != std::string::npos);
 }
 } // namespace
 
@@ -577,10 +663,12 @@ int main()
     TestArchiveRoundTrip();
     TestCr2wReplacePaths();
     TestCr2wRejects();
+    TestCr2wReadImports();
     TestPathHash();
     TestNaming();
     TestManifest();
     TestVariant();
+    TestDecide();
     TestUtil();
     TestReport();
     if (g_failures == 0)

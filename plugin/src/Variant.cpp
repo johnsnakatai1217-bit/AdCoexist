@@ -51,6 +51,41 @@ bool Variant::IsConvertible(AdCatalog::FileKind aKind)
            aKind == AdCatalog::FileKind::Widget;
 }
 
+Variant::Decision Variant::Decide(const std::vector<const AdCatalog::File*>& aProvided, const FileReader& aReadMod,
+                                  const std::function<bool(uint64_t)>& aIsAdded)
+{
+    std::unordered_set<uint64_t> hashes;
+    for (const auto* file : aProvided)
+    {
+        if (file->kind == AdCatalog::FileKind::Image)
+            return {true, false, "replaces an image"};
+        hashes.insert(Naming::PathHash(file->path));
+    }
+
+    std::unordered_map<uint64_t, Archive::File> files;
+    if (!aReadMod(hashes, files))
+        return {true, true, "cannot read the mod's files"};
+    for (const auto* file : aProvided)
+    {
+        const auto it = files.find(Naming::PathHash(file->path));
+        std::vector<uint8_t> main;
+        std::vector<std::string> imports;
+        std::string error;
+        const bool read = it != files.end() && !it->second.segments.empty() &&
+                          Oodle::DecompressSegment(it->second.segments[0].data, it->second.segments[0].size, main,
+                                                   error) &&
+                          Cr2w::ReadImports(main, imports, error);
+        if (!read)
+            return {true, true, std::string("cannot read ") + file->path + (error.empty() ? "" : ": " + error)};
+        for (const auto& path : imports)
+        {
+            if (!path.empty() && aIsAdded(Naming::PathHash(path)))
+                return {true, false, "references " + path + ", which a mod adds"};
+        }
+    }
+    return {false, false, "only changes .inkatlas or .inkwidget files that use the game's own pictures"};
+}
+
 const std::vector<const char*>& Variant::AllDistricts()
 {
     static const std::vector<const char*> districts = {

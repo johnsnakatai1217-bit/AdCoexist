@@ -27,9 +27,10 @@ struct ConvertedMod
     unsigned ads = 0;
 };
 
-// The summary of a conversion, written to variants.summary. At most SummaryLength characters
+// The summary of a conversion, written to variants.summary. aSkipped are the mods with ads that weren't converted
+// because they only change how the game's own pictures are shown. At most SummaryLength characters
 std::string Summary(std::string_view aTime, const std::vector<ConvertedMod>& aMods,
-                    const std::vector<std::string>& aProblems);
+                    const std::vector<ConvertedMod>& aSkipped, const std::vector<std::string>& aProblems);
 
 struct Start
 {
