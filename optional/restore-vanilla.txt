@@ -1,0 +1,2 @@
+While this file is in red4ext\plugins\AdCoexist, AdCoexist brings the vanilla ads back, and every ad replacer shows up
+as an extra ad. Remove this file to let the replacer that wins the load order replace the vanilla ad again.

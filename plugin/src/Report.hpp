@@ -28,9 +28,12 @@ struct ConvertedMod
 };
 
 // The summary of a conversion, written to variants.summary. aSkipped are the mods with ads that weren't converted
-// because they only change how the game's own pictures are shown. At most SummaryLength characters
+// because they only change how the game's own pictures are shown. aKept are the mods with ads left in the
+// original place (none with the restore-vanilla option; the section is omitted when empty).
+// At most SummaryLength characters
 std::string Summary(std::string_view aTime, const std::vector<ConvertedMod>& aMods,
-                    const std::vector<ConvertedMod>& aSkipped, const std::vector<std::string>& aProblems);
+                    const std::vector<ConvertedMod>& aSkipped, const std::vector<std::string>& aProblems,
+                    const std::vector<ConvertedMod>& aKept = {});
 
 struct Start
 {
@@ -42,7 +45,8 @@ struct Start
     std::string tweakXl;    // version or "not loaded"
     std::string modManager; // "MO2", "Vortex" or "manual"
     unsigned modArchives = 0;
-    std::string result;                // what this start did
+    bool restoreVanilla = false;      // the restore-vanilla option
+    std::string result;               // what this start did
     std::vector<std::string> problems; // warnings and errors of this start that aren't in the summary
 };
 

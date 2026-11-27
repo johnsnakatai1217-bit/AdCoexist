@@ -86,6 +86,22 @@ Variant::Decision Variant::Decide(const std::vector<const AdCatalog::File*>& aPr
     return {false, false, "only changes .inkatlas or .inkwidget files that use the game's own pictures"};
 }
 
+std::vector<bool> Variant::ChooseOwners(const std::vector<const AdCatalog::Ad*>& aAds)
+{
+    std::unordered_set<const AdCatalog::Ad*> owned;
+    std::vector<bool> owners;
+    for (const auto* ad : aAds)
+        owners.push_back(owned.insert(ad).second);
+    return owners;
+}
+
+void Variant::KeepOwnerFiles(const std::vector<const AdCatalog::File*>& aProvided,
+                             std::unordered_set<uint64_t>& aRestore)
+{
+    for (const auto* file : aProvided)
+        aRestore.erase(Naming::PathHash(file->path));
+}
+
 const std::vector<const char*>& Variant::AllDistricts()
 {
     static const std::vector<const char*> districts = {

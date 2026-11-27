@@ -316,6 +316,7 @@ void TestManifest()
                          "adcoexist 0.15.1\n"
                          "catalog 2.50 6dee4a6e 6dee4a6e\n"
                          "tweakdb 6dee4a6e\n"
+                         "restore-vanilla off\n"
                          "mod 1597440 132923815293828676 archive\\pc\\mod\\a.archive\n");
 
     Manifest::Outputs outputs;
@@ -340,6 +341,12 @@ void TestManifest()
           Manifest::Reuse::Nothing);
     CHECK(Manifest::Decide("", fingerprint, true, outputs) == Manifest::Reuse::No);
     CHECK(Manifest::Decide(manifest + "x", fingerprint, true, outputs) == Manifest::Reuse::No); // corrupted manifest
+
+    // Turning the restore-vanilla option on or off rebuilds
+    auto restoring = inputs;
+    restoring.restoreVanilla = true;
+    CHECK(Manifest::Decide(manifest, Manifest::Fingerprint(restoring), true, outputs) == Manifest::Reuse::No);
+    CHECK(Manifest::ExplainNo(manifest, Manifest::Fingerprint(restoring), true, outputs) == "changed: restore-vanilla on");
 
     // Why the previous result isn't reused
     CHECK(Manifest::ExplainNo("", fingerprint, true, outputs) == "no previous result");
@@ -571,6 +578,31 @@ void TestDecide()
     decision = Variant::Decide({&widgetFile}, Reader({RawFile(widget, {Bytes("not a cr2w file")})}), isAdded);
     CHECK(decision.convert && decision.readError);
 }
+// ---- Original place --------------------------------------------------------------------------------------
+
+void TestOwners()
+{
+    const AdCatalog::File image{"base\\a\\a.xbm", AdCatalog::FileKind::Image};
+    const AdCatalog::File image2{"base\\a\\a_1080p.xbm", AdCatalog::FileKind::Image};
+    const AdCatalog::File widget{"base\\a\\a.inkwidget", AdCatalog::FileKind::Widget};
+    const AdCatalog::Ad a{"base\\a\\", nullptr, 0, nullptr, 0};
+    const AdCatalog::Ad b{"base\\b\\", nullptr, 0, nullptr, 0};
+
+    // One mod: it keeps the original place
+    CHECK(Variant::ChooseOwners({&a}) == (std::vector<bool>{true}));
+    // Two mods that replace different ads: both keep their place
+    CHECK(Variant::ChooseOwners({&a, &b}) == (std::vector<bool>{true, true}));
+    // X replaces A and B, Y replaces A: X (first in load order) keeps both, Y is converted
+    CHECK(Variant::ChooseOwners({&a, &b, &a}) == (std::vector<bool>{true, true, false}));
+    CHECK(Variant::ChooseOwners({}).empty());
+
+    // Files partly overlap. The owner has an image and the .inkwidget, the other mod has two images: only the image
+    // the owner doesn't have is restored to vanilla
+    std::unordered_set<uint64_t> restore{Naming::PathHash(image.path), Naming::PathHash(image2.path)};
+    Variant::KeepOwnerFiles({&image, &widget}, restore);
+    CHECK(restore == (std::unordered_set<uint64_t>{Naming::PathHash(image2.path)}));
+}
+
 // ---- Util ------------------------------------------------------------------------------------------------
 
 void TestUtil()
@@ -654,6 +686,16 @@ void TestReport()
     const auto empty = Report::Summary("t", {}, {}, {});
     CHECK(empty.find("Converted mods: none") != std::string::npos);
     CHECK(empty.find("shown): none") != std::string::npos);
+    CHECK(empty.find("Kept in the original place") == std::string::npos);
+
+    // The report shows the option and the mods kept in the original place
+    const auto kept = Report::Summary("t", mods, mods, problems, mods);
+    CHECK(kept.size() <= Report::SummaryLength);
+    CHECK(kept.find("Kept in the original place:") != std::string::npos);
+    CHECK(kept.find("Problems at that conversion:") != std::string::npos);
+    CHECK(plain.find("Option restore-vanilla: off") != std::string::npos);
+    start.restoreVanilla = true;
+    CHECK(Report::Compose(start, kept).find("Option restore-vanilla: on") != std::string::npos);
 }
 } // namespace
 
@@ -669,6 +711,7 @@ int main()
     TestManifest();
     TestVariant();
     TestDecide();
+    TestOwners();
     TestUtil();
     TestReport();
     if (g_failures == 0)

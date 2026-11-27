@@ -78,10 +78,12 @@ std::string Report::HidePath(std::string_view aText, std::string_view aDirectory
 }
 
 std::string Report::Summary(std::string_view aTime, const std::vector<ConvertedMod>& aMods,
-                            const std::vector<ConvertedMod>& aSkipped, const std::vector<std::string>& aProblems)
+                            const std::vector<ConvertedMod>& aSkipped, const std::vector<std::string>& aProblems,
+                            const std::vector<ConvertedMod>& aKept)
 {
     constexpr size_t ModsLength = 1400;
     constexpr size_t SkippedLength = 500;
+    constexpr size_t KeptLength = 500;
     std::string out = "Last conversion: " + std::string(aTime) + "\n";
 
     const auto lines = [](const std::vector<ConvertedMod>& aList) {
@@ -91,6 +93,8 @@ std::string Report::Summary(std::string_view aTime, const std::vector<ConvertedM
         return out;
     };
     out += Section("Converted mods:", lines(aMods), ModsLength);
+    if (!aKept.empty())
+        out += Section("Kept in the original place:", lines(aKept), KeptLength);
     out += Section("Not converted (only change how the game's own pictures are shown):", lines(aSkipped),
                    SkippedLength);
     out += Section("Problems at that conversion:", aProblems, SummaryLength - out.size());
@@ -107,6 +111,7 @@ std::string Report::Compose(const Start& aStart, std::string_view aSummary)
     out += "TweakXL: " + aStart.tweakXl + "\n";
     out += "Installed with: " + aStart.modManager + "\n";
     out += "Mod archives: " + std::to_string(aStart.modArchives) + "\n";
+    out += std::string("Option restore-vanilla: ") + (aStart.restoreVanilla ? "on" : "off") + "\n";
     out += "This start: " + aStart.result + "\n";
     out += Section("Problems at this start:", aStart.problems, ProblemsLength);
     out += "\n";

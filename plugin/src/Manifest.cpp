@@ -30,6 +30,7 @@ std::string Manifest::Fingerprint(const Inputs& aInputs)
     text += line;
     std::snprintf(line, sizeof(line), "tweakdb %08x\n", aInputs.tweakDbChecksum);
     text += line;
+    text += aInputs.restoreVanilla ? "restore-vanilla on\n" : "restore-vanilla off\n";
     for (const auto& mod : aInputs.mods)
     {
         std::snprintf(line, sizeof(line), "%llu %lld ", static_cast<unsigned long long>(mod.size),

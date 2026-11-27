@@ -52,6 +52,15 @@ struct Decision
 Decision Decide(const std::vector<const AdCatalog::File*>& aProvided, const FileReader& aReadMod,
                 const std::function<bool(uint64_t)>& aIsAdded);
 
+// Without the restore-vanilla option, one mod per ad keeps the original place instead of being converted.
+// aAds has the ad of every conversion in load order, so it is the first one. Returns true for the conversions
+// that keep the original place
+std::vector<bool> ChooseOwners(const std::vector<const AdCatalog::Ad*>& aAds);
+
+// Removes the files an owner provides from the files restored to vanilla, so the owner's versions stay in the
+// original place
+void KeepOwnerFiles(const std::vector<const AdCatalog::File*>& aProvided, std::unordered_set<uint64_t>& aRestore);
+
 // Districts for ads that aren't in any district list (the 18 from the custom advertisements guide)
 const std::vector<const char*>& AllDistricts();
 

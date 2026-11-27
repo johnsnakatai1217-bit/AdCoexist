@@ -25,6 +25,7 @@ struct Inputs
     uint32_t catalogTweakDbChecksum = 0;
     uint32_t catalogTweakDbEp1Checksum = 0;
     uint32_t tweakDbChecksum = 0;
+    bool restoreVanilla = false; // the restore-vanilla option
     std::vector<ModStat> mods; // in load order
 };
 

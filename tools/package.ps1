@@ -1,5 +1,6 @@
 ﻿# Builds the plugin and creates the release archive (dist/AdCoexist-<version>.zip).
 # The archive contains red4ext/plugins/AdCoexist/ (the DLL and the license files), to be extracted into the game directory.
+# Also creates dist/AdCoexist-RestoreVanilla-<version>.zip, the optional file for the restore-vanilla option.
 # Nothing is written to the game directory.
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
@@ -39,3 +40,17 @@ if ($LASTEXITCODE -ne 0) { throw "zip creation failed" }
 
 Write-Host "Created $zip"
 & $tar -t -v -f $zip
+
+# The optional file: only restore-vanilla.txt, which turns the option on
+$optionStage = Join-Path $root 'build\stage-restore-vanilla'
+$optionDir = Join-Path $optionStage 'red4ext\plugins\AdCoexist'
+$optionZip = Join-Path $dist "AdCoexist-RestoreVanilla-$version.zip"
+if (Test-Path $optionStage) { Remove-Item -Recurse -Force $optionStage }
+New-Item -ItemType Directory -Force $optionDir | Out-Null
+Copy-Item (Join-Path $root 'optional\restore-vanilla.txt') $optionDir
+if (Test-Path $optionZip) { Remove-Item -Force $optionZip }
+& $tar -a -c -f $optionZip -C $optionStage red4ext
+if ($LASTEXITCODE -ne 0) { throw "zip creation failed" }
+
+Write-Host "Created $optionZip"
+& $tar -t -v -f $optionZip
